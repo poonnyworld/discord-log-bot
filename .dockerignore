@@ -1,0 +1,6 @@
+pycache
+venv
+.git
+.env
+channels.json
+*.pyc

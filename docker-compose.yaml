@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  discord-bot:
+    build: .
+    container_name: discord_log_bot
+    restart: unless-stopped  # ให้รันใหม่ตลอดถ้าแอป Crash หรือ Server รีสตาร์ท
+    env_file:
+      - .env                 # อ่านค่า Token จากไฟล์ .env
+    volumes:
+      # Map ไฟล์ channels.json เข้าไป เพื่อให้แก้ไข Config ได้โดยไม่ต้อง Build ใหม่
+      - ./channels.json:/app/channels.json
+    environment:
+      - PYTHONUNBUFFERED=1   # ให้ Log แสดงผลออกมาทันที ไม่ต้องรอ Buffer
