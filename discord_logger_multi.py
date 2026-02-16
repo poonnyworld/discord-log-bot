@@ -51,21 +51,52 @@ async def on_ready():
 
 # --- SLASH COMMAND ---
 
-@bot.tree.command(name="sync_history", description="ดึงประวัติแชทตั้งแต่วันที่ 1 ธ.ค. ปีปัจจุบัน (Admin Only)")
+@bot.tree.command(name="sync_history", description="ดึงประวัติแชทย้อนหลัง (Admin Only)")
+@app_commands.describe(
+    channel="ช่องที่ต้องการ sync (ถ้าไม่ระบุจะ sync ทุกช่อง)",
+    start_year="ปีที่ต้องการเริ่มดึงข้อมูล (เช่น 2026)",
+    start_month="เดือนที่ต้องการเริ่มดึงข้อมูล (1-12)",
+    start_day="วันที่ที่ต้องการเริ่มดึงข้อมูล (1-31)"
+)
 @app_commands.checks.has_permissions(administrator=True)
-async def sync_history(interaction: discord.Interaction):
+async def sync_history(interaction: discord.Interaction, channel: discord.TextChannel = None, start_year: int = None, start_month: int = None, start_day: int = None):
     await interaction.response.defer(ephemeral=True)
     
-    # 1. หาวันที่ 1 ธ.ค. ของปีปัจจุบันอัตโนมัติ
-    current_year = datetime.datetime.now().year
-    start_date = datetime.datetime(current_year, 12, 1, tzinfo=datetime.timezone.utc)
+    # กำหนดวันที่เริ่มต้น
+    if start_year is None or start_month is None or start_day is None:
+        # ถ้าไม่ระบุ ให้ใช้ค่าเดิม: 1 ธ.ค. ของปีปัจจุบัน
+        current_year = datetime.datetime.now().year
+        start_date = datetime.datetime(current_year, 12, 1, tzinfo=datetime.timezone.utc)
+        date_display = f"1 ธ.ค. {current_year}"
+    else:
+        # ใช้วันที่ที่ผู้ใช้ระบุ
+        try:
+            start_date = datetime.datetime(start_year, start_month, start_day, tzinfo=datetime.timezone.utc)
+            # แปลงเป็นภาษาไทยสำหรับแสดงผล
+            month_names = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", 
+                          "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+            date_display = f"{start_day} {month_names[start_month]} {start_year}"
+        except ValueError as e:
+            await interaction.followup.send(f"❌ วันที่ไม่ถูกต้อง: {e}\nกรุณาระบุวันที่ที่ถูกต้อง (เช่น ปี=2026, เดือน=1, วันที่=1)", ephemeral=True)
+            return
     
-    await interaction.followup.send(f"⏳ เริ่มดึงข้อมูลย้อนหลังตั้งแต่ **1 ธ.ค. {current_year}**...", ephemeral=True)
+    # ตรวจสอบว่าช่องที่ระบุอยู่ใน CHANNEL_MAP หรือไม่
+    channels_to_sync = {}
+    if channel:
+        channel_id_str = str(channel.id)
+        if channel_id_str not in CHANNEL_MAP:
+            await interaction.followup.send(f"❌ ช่อง **{channel.name}** ไม่ได้อยู่ในรายการที่ต้อง sync\nกรุณาเพิ่มช่องนี้ใน `channels.json` ก่อน", ephemeral=True)
+            return
+        channels_to_sync[channel_id_str] = CHANNEL_MAP[channel_id_str]
+        await interaction.followup.send(f"⏳ เริ่มดึงข้อมูลย้อนหลังจากช่อง **{channel.name}** ตั้งแต่ **{date_display}**...", ephemeral=True)
+    else:
+        channels_to_sync = CHANNEL_MAP
+        await interaction.followup.send(f"⏳ เริ่มดึงข้อมูลย้อนหลังจากทุกช่องตั้งแต่ **{date_display}**...", ephemeral=True)
     
     total_msgs = 0
     synced_channels_list = [] # เก็บรายชื่อห้องที่ Sync สำเร็จ
 
-    for channel_id_str, webhook_url in CHANNEL_MAP.items():
+    for channel_id_str, webhook_url in channels_to_sync.items():
         try:
             channel_id = int(channel_id_str)
             channel = bot.get_channel(channel_id)
